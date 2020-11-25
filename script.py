@@ -1,17 +1,19 @@
 import numpy as np
 import cv2 as cv
 
-# cap = cv.VideoCapture(0)
+cap = cv.VideoCapture(0)
+fgbg = cv.createBackgroundSubtractorMOG2()
 
 # steps outlined in https://arxiv.org/pdf/1907.05281.pdf
 
 def start():
     print("beginning program")
-    featureExtraction('test/test01.jpg')
-    filterKeypoints()
-    manual()
+    # backgroundSegmentation()
+    # featureExtraction('test/test01.jpg')
+    # filterKeypoints()
+    # manual()
 
-    '''
+
     # Supposed to bring up a video feed of camera, but not working on my computer
 
     while(True):
@@ -19,21 +21,26 @@ def start():
         ret, frame = cap.read()
 
         # Our operations on the frame come here
-        gray = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
-
+        # gray = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
+        fgmask = backgroundSegmentation(frame)
         # Display the resulting frame
-        cv.imshow('frame',gray)
-        if cv.waitKey(0) & 0xFF == ord('q'):
+        # cv.imshow('frame',gray)
+        img, kp, des = featureExtraction(fgmask)
+        cv.imshow('frame1', img)
+        if (cv.waitKey(1) & 0xFF) == ord('q'):
             break
     # When everything done, release the capture
     cap.release()
     cv.destroyAllWindows()
-    '''
 
-def backgroundSegmentation():
+def backgroundSegmentation(frame):
     print("Step 1: find silhouette of foreground")
     # https://opencv-python-tutroals.readthedocs.io/en/latest/py_tutorials/py_video/py_bg_subtraction/py_bg_subtraction.html
     # https://www.pyimagesearch.com/2020/07/27/opencv-grabcut-foreground-segmentation-and-extraction/ -> has explanations
+    fgmask = fgbg.apply(frame)
+    name = 'fgmask_frame_'+str(fgmask)+'.jpg'
+    cv.imwrite(name,fgmask)
+    return name
 
 def featureExtraction(imgPath): # should take in an image (or N x N x 3 matrix that represents an image)
     print("Step 2: find features of image")

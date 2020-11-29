@@ -29,9 +29,10 @@ def start():
         # gray = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
         fgmask = backgroundSegmentation(frame)
         prevFrame = currFrame
-        currFrame = frame
-        img, kp, des = featureExtraction(currFrame)
-        cv.imshow('frame1', img)
+        currFrame = fgmask
+        # img, kp, des = featureExtraction(currFrame)
+       
+        cv.imshow('frame1',  filterKeypoints(prevFrame, currFrame))
         if (cv.waitKey(1) & 0xFF) == ord('q'):
             break
     # When everything done, release the capture
@@ -43,19 +44,19 @@ def backgroundSegmentation(frame):
     # https://opencv-python-tutroals.readthedocs.io/en/latest/py_tutorials/py_video/py_bg_subtraction/py_bg_subtraction.html
     # https://www.pyimagesearch.com/2020/07/27/opencv-grabcut-foreground-segmentation-and-extraction/ -> has explanations
     fgmask = fgbg.apply(frame)
-    name = 'fgmask_frame_'+str(fgmask)+'.jpg'
     # cv.imwrite(name,fgmask)
-    return name
+    return fgmask
 
 def featureExtraction(frame): # should take in an image (or N x N x 3 matrix that represents an image)
     print("Step 2: find features of image")
     # https://opencv-python-tutroals.readthedocs.io/en/latest/py_tutorials/py_feature2d/py_surf_intro/py_surf_intro.html -> not sure this works with a venv
     # https://docs.opencv.org/master/da/df5/tutorial_py_sift_intro.html
 
-    gray = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
+    # gray = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
     sift = cv.SIFT_create()
-    kp, des = sift.detectAndCompute(gray,None)
-    img = cv.drawKeypoints(gray, kp, frame)
+    kp, des = sift.detectAndCompute(frame,None)
+    img = cv.drawKeypoints(frame, kp, outImage = None, color=(255,0,0))
+    cv.drawKeypoints(frame, kp, img)
     return img, kp, des
 
 '''
@@ -70,16 +71,20 @@ def featureExtractionForImgPath(imgPath):
     return img, kp, des
 '''
 
-def filterKeypoints():
+def filterKeypoints(prevFrame, currFrame):
     print("Step 3: filter features within silhouette")
     frame1, frame1_kp, frame1_des = featureExtraction(prevFrame)
     frame2, frame2_kp, frame2_des = featureExtraction(currFrame)
+    if len(frame2_kp)==0:
+        frame2 = frame1
+        frame2_des = frame1_des
+        frame2_kp = frame1_kp
     #-- Step 2: Matching descriptor vectors with a FLANN based matcher
     # Since SURF is a floating-point descriptor NORM_L2 is used
     matcher = cv.DescriptorMatcher_create(cv.DescriptorMatcher_FLANNBASED)
     knn_matches = matcher.knnMatch(frame1_des, frame2_des, 2)
     #-- Filter matches using the Lowe's ratio test
-    ratio_thresh = 0.7
+    ratio_thresh = 0.75
     good_matches = []
     for m,n in knn_matches:
         if m.distance < ratio_thresh * n.distance:
@@ -88,6 +93,7 @@ def filterKeypoints():
     img_matches = np.empty((max(frame1.shape[0], frame2.shape[0]), frame1.shape[1]+frame2.shape[1], 3), dtype=np.uint8)
     cv.drawMatches(frame1, frame1_kp, frame2, frame2_kp, good_matches, img_matches, flags=cv.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
     # cv.imwrite("MATCHES.jpg", img_matches)
+    return img_matches
 
 
 

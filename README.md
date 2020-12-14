@@ -1,6 +1,6 @@
 # Body-Part-Tracking-For-AR
 
 # Running program
-- cd into the project directory and enter "source venv/bin/activate"
-- run script.py
+- install dependencies in requirements.txt and requirements-apt.txt
+- run 'python script.py'
 - Will fill out in detail later

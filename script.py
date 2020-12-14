@@ -1,118 +1,153 @@
+import tkinter
+from tkinter import Label, Button, StringVar
+import cv2
+from PIL import Image, ImageTk
+import time
 import numpy as np
 import cv2 as cv
 
-cap = cv.VideoCapture(0)
-fgbg = cv.createBackgroundSubtractorMOG2()
-prevFrame = None
-currFrame = None
+faceCascade = cv.CascadeClassifier('xml/haarcascade_frontalface_default.xml')
+eyeCascade = cv.CascadeClassifier('xml/haarcascade_eye.xml')
+class App:
+    def __init__(self, window, window_title, video_source=0):
+        self.window = window
+        self.window.title(window_title)
+        self.video_source = video_source
 
-# steps outlined in https://arxiv.org/pdf/1907.05281.pdf
+        # open video source (by default this will try to open the computer webcam)
+        self.vid = MyVideoCapture(self.video_source)
 
-def start():
-    print("beginning program")
-    # backgroundSegmentation()
-    # featureExtraction('test/test01.jpg')
-    # filterKeypoints()
-    # manual()
+        # Create a canvas that can fit the above video source size
+        self.canvas = tkinter.Canvas(window, width = self.vid.width, height = self.vid.height)
+        self.canvas.pack()
 
-    # Supposed to bring up a video feed of camera, but not working on my computer
+        # create nose image
+        load = Image.open("nose.png")
+        noseImage = ImageTk.PhotoImage(load)
+        self.nose = self.canvas.create_image(20, 20, image=noseImage)
+        self.nose_pos = [20,20]
+        self.noseBool = True
+
+        # create eye image
+        load = Image.open("eyeball.png")
+        load = load.resize((128, 128))
+        eyeImage = ImageTk.PhotoImage(load)
+        self.eyeL = self.canvas.create_image(20, 20, image=eyeImage)
+        self.eyeR = self.canvas.create_image(40, 40, image=eyeImage)
+        self.eye_pos = [20,20,40,40]
+        self.eyeBool = False
+
+        # Button that lets the user take a snapshot
+        self.btn_snapshot=tkinter.Button(window, text="Snapshot", width=50, command=self.snapshot)
+        self.btn_snapshot.pack(anchor=tkinter.CENTER, expand=True)
     
-    ret, frame = cap.read()
-    prevFrame = frame
-    currFrame = frame
+        # Button to turn on eyes and nose
+        var = StringVar()
+        var.set("Select an image")
+        btnEye = Button(self.window, text="Eyes", width=50, command=self.EyeOverlap)
+        btnNose = Button(self.window, text="Nose", width=50, command=self.NoseOverlap)
+        btnEye.pack(anchor=tkinter.CENTER, expand=True, padx="10", pady="10")
+        btnNose.pack(anchor=tkinter.CENTER, expand=True, padx="10", pady="10")
 
-    while(True):
-        # Capture frame-by-frame
-        ret, frame = cap.read()
+        # After it is called once, the update method will be automatically called every delay milliseconds
+        self.delay = 15
+        self.update()
 
-        # Our operations on the frame come here
-        # gray = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
-        fgmask = backgroundSegmentation(frame)
-        prevFrame = currFrame
-        currFrame = fgmask
-        # img, kp, des = featureExtraction(currFrame)
-       
-        cv.imshow('frame1',  filterKeypoints(prevFrame, currFrame))
-        if (cv.waitKey(1) & 0xFF) == ord('q'):
-            break
-    # When everything done, release the capture
-    cap.release()
-    cv.destroyAllWindows()
+        self.window.mainloop()
 
-def backgroundSegmentation(frame):
-    print("Step 1: find silhouette of foreground")
-    # https://opencv-python-tutroals.readthedocs.io/en/latest/py_tutorials/py_video/py_bg_subtraction/py_bg_subtraction.html
-    # https://www.pyimagesearch.com/2020/07/27/opencv-grabcut-foreground-segmentation-and-extraction/ -> has explanations
-    fgmask = fgbg.apply(frame)
-    # cv.imwrite(name,fgmask)
-    return fgmask
+    def snapshot(self):
+        # Get a frame from the video source
+        ret, frame = self.vid.get_frame()
 
-def featureExtraction(frame): # should take in an image (or N x N x 3 matrix that represents an image)
-    print("Step 2: find features of image")
-    # https://opencv-python-tutroals.readthedocs.io/en/latest/py_tutorials/py_feature2d/py_surf_intro/py_surf_intro.html -> not sure this works with a venv
-    # https://docs.opencv.org/master/da/df5/tutorial_py_sift_intro.html
+        if ret:
+            cv2.imwrite("frame-" + time.strftime("%d-%m-%Y-%H-%M-%S") + ".jpg", cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
 
-    # gray = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
-    sift = cv.SIFT_create()
-    kp, des = sift.detectAndCompute(frame,None)
-    img = cv.drawKeypoints(frame, kp, outImage = None, color=(255,0,0))
-    cv.drawKeypoints(frame, kp, img)
-    return img, kp, des
+    def update(self):
+        # Get a frame from the video source
+        ret, frame = self.vid.get_frame()
 
-'''
-def featureExtractionForImgPath(imgPath):
-    print("Step 2: find features of image")
-    img = cv.imread(imgPath)
-    gray= cv.cvtColor(img,cv.COLOR_BGR2GRAY)
-    sift = cv.SIFT_create()
-    kp, des = sift.detectAndCompute(gray,None)
-    img=cv.drawKeypoints(gray,kp,img)
-    cv.imwrite(imgPath[0:-4] + "_KEYPOINTS.jpg",img)
-    return img, kp, des
-'''
+        if ret:
+            # self.photo = PIL.ImageTk.PhotoImage(image = PIL.Image.fromarray(frame)) 
+            self.photo = self.getFaceFromFrame(frame)  
+            self.canvas.create_image(0, 0, image = self.photo, anchor = tkinter.NW)
+            self.canvas.tag_raise(self.nose) if self.noseBool else self.canvas.tag_lower(self.nose)
+            self.canvas.tag_raise(self.eyeL) if self.eyeBool else self.canvas.tag_lower(self.eyeL)
+            self.canvas.tag_raise(self.eyeR) if self.eyeBool else self.canvas.tag_lower(self.eyeR)
 
-def filterKeypoints(prevFrame, currFrame):
-    print("Step 3: filter features within silhouette")
-    frame1, frame1_kp, frame1_des = featureExtraction(prevFrame)
-    frame2, frame2_kp, frame2_des = featureExtraction(currFrame)
-    if len(frame2_kp)==0:
-        frame2 = frame1
-        frame2_des = frame1_des
-        frame2_kp = frame1_kp
-    #-- Step 2: Matching descriptor vectors with a FLANN based matcher
-    # Since SURF is a floating-point descriptor NORM_L2 is used
-    matcher = cv.DescriptorMatcher_create(cv.DescriptorMatcher_FLANNBASED)
-    knn_matches = matcher.knnMatch(frame1_des, frame2_des, 2)
-    #-- Filter matches using the Lowe's ratio test
-    ratio_thresh = 0.75
-    good_matches = []
-    for m,n in knn_matches:
-        if m.distance < ratio_thresh * n.distance:
-            good_matches.append(m)
-    #-- Draw matches
-    img_matches = np.empty((max(frame1.shape[0], frame2.shape[0]), frame1.shape[1]+frame2.shape[1], 3), dtype=np.uint8)
-    cv.drawMatches(frame1, frame1_kp, frame2, frame2_kp, good_matches, img_matches, flags=cv.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
-    # cv.imwrite("MATCHES.jpg", img_matches)
-    return img_matches
-
-
-
-def manual():
-    print("Step 4: ?")
-    img = cv.imread('test/test05.png')
-    gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
-    face_cascade = cv.CascadeClassifier('xml/haarcascade_frontalface_default.xml')
-    faces = face_cascade.detectMultiScale(gray, 1.3, 5)
-    for (x,y,w,h) in faces:
-        img = cv.rectangle(img,(x,y),(x+w,y+h),(255,0,0),2)
-        roi_gray = gray[y:y+h, x:x+w]
-        roi_color = img[y:y+h, x:x+w]
-        # cv.imwrite("FACES.jpg", roi_color)
+        self.window.after(self.delay, self.update)
     
+    def getFaceFromFrame(self, img):
+        gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
+        if(self.noseBool):
+            faces = faceCascade.detectMultiScale(
+                gray,     
+                scaleFactor=1.2,
+                minNeighbors=5,     
+                minSize=(20, 20)
+            )
+            for (x,y,w,h) in faces:
+                cv.rectangle(img,(x,y),(x+w,y+h),(255,0,0),2) 
+                self.canvas.move(self.nose, - self.nose_pos[0] + (x + w//2), - self.nose_pos[1] + (y + h//2))
+                self.nose_pos = [x + w//2, y + h //2]
+        if(self.eyeBool):
+            eyes = eyeCascade.detectMultiScale(
+                gray,     
+                scaleFactor=1.2,
+                minNeighbors=5,     
+                minSize=(20, 20)
+            )
+            left = True
+            for (x,y,w,h) in eyes:
+                cv.rectangle(img,(x,y),(x+w,y+h),(255,0,0),2) 
+                if(left):
+                    self.canvas.move(self.eyeL, - self.eye_pos[0] + (x + w//2), - self.eye_pos[1] + (y + h//2))
+                    self.eye_pos = [x + w//2, y + h //2] + self.eye_pos[2:]
+                else:
+                    self.canvas.move(self.eyeR, - self.eye_pos[2] + (x + w//2), - self.eye_pos[3] + (y + h//2))
+                    self.eye_pos = self.eye_pos[:2] + [x + w//2, y + h //2]
+                left = not left
+        # OpenCV represents images in BGR order; however PIL represents
+        # images in RGB order, so we need to swap the channels
+        img = Image.fromarray(img)              # convert the images to PIL format...
+        img = ImageTk.PhotoImage(img)           # ...and then to ImageTk format
+        return img
+    def EyeOverlap(self):
+        print("Hello Eye!")
+        # cv.setMouseCallback('image',overlap_eye_function)
+        self.eyeBool = not self.eyeBool
+    def NoseOverlap(self):
+        print("Hello Nose!")
+        # cv.setMouseCallback('image',overlapNoseFunctions)
+        self.noseBool = not self.noseBool
 
-def matchKeypointsFrameToFrame():
-    print("Step 5: match keypoints")
-    # https://docs.opencv.org/3.4/d5/d6f/tutorial_feature_flann_matcher.html
+class MyVideoCapture:
+    def __init__(self, video_source=0):
+        # Open the video source
+        self.vid = cv2.VideoCapture(video_source)
+        self.vid.set(3,640) # set Width
+        self.vid.set(4,480) # set Height
+        if not self.vid.isOpened():
+            raise ValueError("Unable to open video source", video_source)
 
-if __name__ == "__main__":
-    start()
+        # Get video source width and height
+        self.width = self.vid.get(cv2.CAP_PROP_FRAME_WIDTH)
+        self.height = self.vid.get(cv2.CAP_PROP_FRAME_HEIGHT)
+
+    def get_frame(self):
+        if self.vid.isOpened():
+            ret, frame = self.vid.read()
+            if ret:
+                # Return a boolean success flag and the current frame converted to BGR
+                return (ret, cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+            else:
+                return (ret, None)
+        else:
+            return (ret, None)
+
+    # Release the video source when the object is destroyed
+    def __del__(self):
+        if self.vid.isOpened():
+            self.vid.release()
+
+# Create a window and pass it to the Application object
+App(tkinter.Tk(), "Tkinter and OpenCV")
